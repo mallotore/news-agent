@@ -5,6 +5,7 @@ import re
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from operator import attrgetter
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -18,10 +19,6 @@ MAX_WORKERS = 8
 # Tolerate small clock differences, but drop items dated in the future.
 _FUTURE_TOLERANCE = timedelta(hours=1)
 _TAG_RE = re.compile(r"<[^>]+>")
-
-
-def _by_date(item: Item) -> datetime:
-    return item.published
 
 
 def make_client() -> httpx.Client:
@@ -104,12 +101,13 @@ def collect_items(
             except Exception as exc:
                 errors.append(f"{url}: {exc}")
                 continue
-            recent = sorted((i for i in items if cutoff <= i.published <= latest), key=_by_date, reverse=True)
+            in_window = (i for i in items if cutoff <= i.published <= latest)
+            recent = sorted(in_window, key=attrgetter("published"), reverse=True)
             # Cap per feed so one very chatty source cannot crowd out the others.
             candidates += recent[:max_items_per_feed]
 
     # Newest first; the first occurrence of each canonical URL wins.
     unique: dict[str, Item] = {}
-    for item in sorted(candidates, key=_by_date, reverse=True):
+    for item in sorted(candidates, key=attrgetter("published"), reverse=True):
         unique.setdefault(normalize_url(item.url), item)
     return list(unique.values())[:max_candidates], errors

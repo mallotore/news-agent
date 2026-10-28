@@ -17,9 +17,12 @@ from news_agent.summarize import summarize_topic
 
 
 def _positive_int(value: str) -> int:
-    number = int(value)
+    try:
+        number = int(value)
+    except ValueError:
+        number = 0
     if number <= 0:
-        raise argparse.ArgumentTypeError("must be a positive integer")
+        raise argparse.ArgumentTypeError(f"must be a positive integer, got {value!r}")
     return number
 
 
@@ -73,19 +76,27 @@ def _collect(
 
 def _dry_run(config: Config, topics: list[Topic], hours: int, http: httpx.Client) -> int:
     now = datetime.now(UTC)
+    warnings: list[str] = []
     for topic in topics:
         items, errors = _collect(topic, config, hours, now, http)
+        warnings += errors
         print(f"\n## {topic.title} ({len(items)} candidates)")
         for item in items:
             print(f"  {item.published:%Y-%m-%d %H:%M}  {item.source}: {item.title}\n    {item.url}")
-        for error in errors:
-            print(f"warning: {error}", file=sys.stderr)
+    for warning in warnings:
+        print(f"warning: {warning}", file=sys.stderr)
     return 0
 
 
-def _digest(config: Config, topics: list[Topic], args: argparse.Namespace, http: httpx.Client, llm: ClaudeCli) -> int:
-    language = args.language or config.language
-    hours = args.hours or config.lookback_hours
+def _digest(
+    config: Config,
+    topics: list[Topic],
+    hours: int,
+    language: str,
+    output: Path | None,
+    http: httpx.Client,
+    llm: ClaudeCli,
+) -> int:
     now = datetime.now(UTC)
     day = now.astimezone().date()  # fixed at start so a slow run can't roll into the next day
 
@@ -115,7 +126,7 @@ def _digest(config: Config, topics: list[Topic], args: argparse.Namespace, http:
             entries = []
         sections.append((topic, entries))
 
-    path = args.output or config.output_dir / f"{day.isoformat()}.md"
+    path = output or config.output_dir / f"{day.isoformat()}.md"
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(render_digest(day, language, sections, warnings), encoding="utf-8")
@@ -127,7 +138,8 @@ def _digest(config: Config, topics: list[Topic], args: argparse.Namespace, http:
 
 
 def _run(config: Config, topics: list[Topic], args: argparse.Namespace) -> int:
-    hours = args.hours or config.lookback_hours
+    hours = args.hours if args.hours is not None else config.lookback_hours
+    language = args.language or config.language
 
     if args.check_feeds or args.dry_run:
         with make_client() as http:
@@ -141,7 +153,7 @@ def _run(config: Config, topics: list[Topic], args: argparse.Namespace) -> int:
         )
         return 2
     with make_client() as http:
-        return _digest(config, topics, args, http, ClaudeCli(model=args.model or config.model))
+        return _digest(config, topics, hours, language, args.output, http, ClaudeCli(model=args.model or config.model))
 
 
 def main(argv: list[str] | None = None) -> int:

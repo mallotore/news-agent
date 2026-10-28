@@ -91,3 +91,60 @@ def test_one_failing_topic_is_reported_but_run_succeeds(config_path, stub_networ
 def test_all_topics_failing_returns_1(config_path, stub_network, monkeypatch, tmp_path):
     fake_llm(monkeypatch, fail_topics=("AI", "Java"))
     assert cli.main(["-c", str(config_path), "-o", str(tmp_path / "digest.md")]) == 1
+
+
+def test_hours_rejects_non_numeric(config_path, capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["-c", str(config_path), "--hours", "abc"])
+    assert "must be a positive integer" in capsys.readouterr().err
+
+
+def test_hours_and_model_overrides_reach_collaborators(config_path, monkeypatch, item, tmp_path):
+    seen = {}
+
+    def collect(*a, **kw):
+        seen["hours"] = kw["lookback_hours"]
+        return [item], []
+
+    class Llm:
+        def __init__(self, model):
+            seen["model"] = model
+
+        def complete_json(self, **kw):
+            return {"entries": []}
+
+    monkeypatch.setattr(cli, "collect_items", collect)
+    monkeypatch.setattr(cli, "ClaudeCli", Llm)
+    monkeypatch.setattr(cli.shutil, "which", lambda name: f"/usr/bin/{name}")
+    assert cli.main(["-c", str(config_path), "--hours", "7", "-m", "haiku", "-o", str(tmp_path / "d.md")]) == 0
+    assert seen == {"hours": 7, "model": "haiku"}
+
+
+def test_check_feeds_reports_ok_and_fail(config_path, monkeypatch, item, capsys):
+    def fetch(url, http):
+        if url.endswith("j.xml"):
+            raise RuntimeError("down")
+        return [item]
+
+    monkeypatch.setattr(cli, "fetch_feed", fetch)
+    assert cli.main(["-c", str(config_path), "--check-feeds"]) == 1
+    out = capsys.readouterr().out
+    assert "OK    https://example.com/a.xml" in out and "latest:" in out
+    assert "FAIL  https://example.com/j.xml" in out
+
+
+def test_all_feeds_failing_returns_1_without_calling_llm(config_path, monkeypatch, tmp_path):
+    monkeypatch.setattr(cli, "collect_items", lambda *a, **kw: ([], ["feed: offline"]))
+    monkeypatch.setattr(cli.shutil, "which", lambda name: f"/usr/bin/{name}")
+    fake_llm(monkeypatch, fail_topics=("AI", "Java"))  # would fail the run if it were called
+    target = tmp_path / "digest.md"
+    assert cli.main(["-c", str(config_path), "-o", str(target)]) == 1
+    assert "feed: offline" in target.read_text(encoding="utf-8")
+
+
+def test_unwritable_output_exits_with_2(config_path, stub_network, monkeypatch, tmp_path, capsys):
+    fake_llm(monkeypatch)
+    blocker = tmp_path / "file"
+    blocker.write_text("x")
+    assert cli.main(["-c", str(config_path), "-o", str(blocker / "digest.md")]) == 2
+    assert "could not write" in capsys.readouterr().err
