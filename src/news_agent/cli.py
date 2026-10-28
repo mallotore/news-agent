@@ -3,12 +3,15 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+
+import httpx
 
 from news_agent.config import Config, ConfigError, Topic, load_config, select_topics
 from news_agent.feeds import collect_items, fetch_feed, make_client
 from news_agent.llm import ClaudeCli
+from news_agent.models import Entry
 from news_agent.render import render_digest
 from news_agent.summarize import summarize_topic
 
@@ -29,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _check_feeds(topics: list[Topic], http) -> int:
+def _check_feeds(topics: list[Topic], http: httpx.Client) -> int:
     failures = 0
     for topic in topics:
         print(f"[{topic.title}]")
@@ -37,9 +40,12 @@ def _check_feeds(topics: list[Topic], http) -> int:
             try:
                 items = fetch_feed(url, http)
                 latest = max((i.published for i in items), default=None)
-                print(f"  OK    {url}  ({len(items)} entries, latest: {latest:%Y-%m-%d})" if latest
-                      else f"  OK    {url}  (0 usable entries)")
-            except Exception as exc:  # noqa: BLE001
+                print(
+                    f"  OK    {url}  ({len(items)} entries, latest: {latest:%Y-%m-%d})"
+                    if latest
+                    else f"  OK    {url}  (0 usable entries)"
+                )
+            except Exception as exc:
                 failures += 1
                 print(f"  FAIL  {url}  ({exc})")
     return 1 if failures else 0
@@ -48,9 +54,9 @@ def _check_feeds(topics: list[Topic], http) -> int:
 def _run(config: Config, topics: list[Topic], args: argparse.Namespace) -> int:
     language = args.language or config.language
     hours = args.hours or config.lookback_hours
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
-    llm = None
+    llm: ClaudeCli | None = None
     if not (args.dry_run or args.check_feeds):
         if shutil.which("claude") is None:
             print(
@@ -61,7 +67,7 @@ def _run(config: Config, topics: list[Topic], args: argparse.Namespace) -> int:
             return 2
         llm = ClaudeCli(model=args.model or config.model)
 
-    sections: list[tuple[Topic, list]] = []
+    sections: list[tuple[Topic, list[Entry]]] = []
     warnings: list[str] = []
     failed_topics = 0
 
@@ -87,6 +93,7 @@ def _run(config: Config, topics: list[Topic], args: argparse.Namespace) -> int:
                     print(f"  {item.published:%Y-%m-%d %H:%M}  {item.source}: {item.title}\n    {item.url}")
                 continue
 
+            assert llm is not None  # set above whenever we are not in dry-run mode
             try:
                 entries = summarize_topic(
                     llm,
@@ -95,7 +102,7 @@ def _run(config: Config, topics: list[Topic], args: argparse.Namespace) -> int:
                     language=language,
                     max_items=config.max_items_per_topic,
                 )
-            except Exception as exc:  # noqa: BLE001 - keep the other topics going
+            except Exception as exc:
                 failed_topics += 1
                 warnings.append(f"[{topic.title}] summarization failed: {exc}")
                 entries = []

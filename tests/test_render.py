@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from news_agent.config import Topic
 from news_agent.models import Entry
@@ -12,7 +12,7 @@ def entry(**overrides):
         why_interesting="Matters",
         url="https://openjdk.org/projects/jdk/26/",
         source="Inside Java",
-        published=datetime(2026, 10, 27, tzinfo=timezone.utc),
+        published=datetime(2026, 10, 27, tzinfo=UTC),
     )
     data.update(overrides)
     return Entry(**data)

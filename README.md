@@ -21,8 +21,8 @@ No API key and no API credits are needed.
 
 ```bash
 uv lock --upgrade                           # once: resolve and pin the latest stable versions
-uv run python -m news_agent --check-feeds   # validate feed URLs first
-uv run python -m news_agent                 # all topics, config defaults
+uv run news-agent --check-feeds   # validate feed URLs first
+uv run news-agent                 # all topics, config defaults
 ```
 
 > `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` are removed from the environment of the `claude`
@@ -56,5 +56,16 @@ which is more fragile than running `uv run` locally.
 ## Tests
 
 ```bash
-uv run pytest
+uv run pytest             # tests
+uv run ruff check .       # lint
+uv run ruff format .      # format
+uv run mypy               # type check
+```
+
+## Layout
+
+```
+src/news_agent/   application code (cli, config, feeds, llm, summarize, render, models)
+tests/            pytest suite
+config.yaml       topics and feed URLs
 ```

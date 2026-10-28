@@ -33,18 +33,21 @@ class ClaudeCli:
         """Run one stateless, tool-less request and return the JSON object the model produced."""
         path = shutil.which(self.executable)
         if path is None:
-            raise LlmError(
-                f"'{self.executable}' not found. Install Claude Code and run `claude` once to log in."
-            )
+            raise LlmError(f"'{self.executable}' not found. Install Claude Code and run `claude` once to log in.")
 
         cmd = [
             path,
             "-p",
-            "--model", self.model,
-            "--output-format", "json",
-            "--json-schema", json.dumps(schema),
-            "--system-prompt", system,
-            "--tools", "",  # pure text task: no file, shell or web access
+            "--model",
+            self.model,
+            "--output-format",
+            "json",
+            "--json-schema",
+            json.dumps(schema),
+            "--system-prompt",
+            system,
+            "--tools",
+            "",  # pure text task: no file, shell or web access
             "--disable-slash-commands",
             "--strict-mcp-config",  # no MCP servers
             "--no-session-persistence",

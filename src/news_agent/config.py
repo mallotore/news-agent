@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -29,7 +30,7 @@ class Config:
     topics: dict[str, Topic]
 
 
-def _positive_int(raw: dict, key: str, default: int) -> int:
+def _positive_int(raw: dict[str, Any], key: str, default: int) -> int:
     value = raw.get(key, default)
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ConfigError(f"'{key}' must be a positive integer, got {value!r}")

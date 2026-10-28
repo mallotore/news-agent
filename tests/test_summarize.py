@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -12,7 +12,7 @@ def make_items(n=3):
             title=f"Title {i}",
             url=f"https://official.example/{i}",
             source="Official Blog",
-            published=datetime(2026, 10, 28, 8, i, tzinfo=timezone.utc),
+            published=datetime(2026, 10, 28, 8, i, tzinfo=UTC),
             summary=f"Excerpt {i}",
         )
         for i in range(n)
@@ -36,7 +36,9 @@ def run(payload, items=None, max_items=5):
 
 
 def test_urls_come_from_items_not_from_the_model():
-    payload = {"entries": [{"id": 1, "headline": "H", "context": "C", "why_interesting": "W", "url": "https://evil.test"}]}
+    payload = {
+        "entries": [{"id": 1, "headline": "H", "context": "C", "why_interesting": "W", "url": "https://evil.test"}]
+    }
     entries, _ = run(payload)
     assert entries[0].url == "https://official.example/1"
     assert entries[0].source == "Official Blog"
@@ -44,7 +46,9 @@ def test_urls_come_from_items_not_from_the_model():
 
 def test_invalid_and_duplicate_ids_are_ignored_and_max_is_enforced():
     base = {"headline": "H", "context": "C", "why_interesting": "W"}
-    payload = {"entries": [{"id": 99, **base}, {"id": 0, **base}, {"id": 0, **base}, {"id": -1, **base}, {"id": 2, **base}]}
+    payload = {
+        "entries": [{"id": 99, **base}, {"id": 0, **base}, {"id": 0, **base}, {"id": -1, **base}, {"id": 2, **base}]
+    }
     entries, _ = run(payload, max_items=1)
     assert [e.url for e in entries] == ["https://official.example/0"]
 

@@ -3,7 +3,8 @@ from __future__ import annotations
 import html
 import re
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import feedparser
@@ -40,11 +41,11 @@ def normalize_url(url: str) -> str:
     return urlunparse((parts.scheme, parts.netloc.lower(), path, "", query, ""))
 
 
-def _entry_datetime(entry) -> datetime | None:
+def _entry_datetime(entry: Any) -> datetime | None:
     for key in ("published_parsed", "updated_parsed"):
         parsed = entry.get(key)
         if parsed:
-            return datetime(*parsed[:6], tzinfo=timezone.utc)
+            return datetime(*parsed[:6], tzinfo=UTC)  # type: ignore[misc]
     return None
 
 
@@ -91,7 +92,7 @@ def collect_items(
         for url, future in futures:
             try:
                 recent = [i for i in future.result() if cutoff <= i.published <= now + timedelta(hours=1)]
-            except Exception as exc:  # noqa: BLE001 - report any network/parse failure and go on
+            except Exception as exc:
                 errors.append(f"{url}: {exc}")
                 continue
             recent.sort(key=lambda i: i.published, reverse=True)

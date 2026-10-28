@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -7,7 +7,7 @@ pytest.importorskip("feedparser")
 
 from news_agent.feeds import clean_text, collect_items, fetch_feed, normalize_url  # noqa: E402
 
-NOW = datetime(2026, 10, 28, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 28, 12, 0, tzinfo=UTC)
 
 
 def rfc822(dt):
@@ -49,11 +49,13 @@ def test_fetch_feed_parses_and_strips_html():
 def test_collect_filters_dedupes_caps_and_survives_failures():
     old = NOW - timedelta(days=10)
     feeds = {
-        "https://a.test/f": rss([
-            ("New", "https://a.test/new", NOW - timedelta(hours=1)),
-            ("Dup", "https://a.test/same?utm_source=x", NOW - timedelta(hours=2)),
-            ("Old", "https://a.test/old", old),
-        ]),
+        "https://a.test/f": rss(
+            [
+                ("New", "https://a.test/new", NOW - timedelta(hours=1)),
+                ("Dup", "https://a.test/same?utm_source=x", NOW - timedelta(hours=2)),
+                ("Old", "https://a.test/old", old),
+            ]
+        ),
         "https://b.test/f": rss([("Dup again", "https://a.test/same", NOW - timedelta(hours=3))]),
     }
     items, errors = collect_items(
