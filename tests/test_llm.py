@@ -51,6 +51,23 @@ def test_falls_back_to_json_in_result_text(fake_run):
     assert ClaudeCli(model="haiku").complete_json(system="s", prompt="p", schema=SCHEMA) == {"entries": [1]}
 
 
+def test_accepts_event_list_output(fake_run):
+    _, result = fake_run
+    events = [{"type": "system"}, {"type": "result", "is_error": False, "structured_output": {"entries": [2]}}]
+    result["value"] = completed(json.dumps(events))
+    assert ClaudeCli(model="haiku").complete_json(system="s", prompt="p", schema=SCHEMA) == {"entries": [2]}
+
+
+def test_timeout_raises_llm_error(monkeypatch):
+    def run(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, kwargs["timeout"])
+
+    monkeypatch.setattr(llm_module.subprocess, "run", run)
+    monkeypatch.setattr(llm_module.shutil, "which", lambda name: name)
+    with pytest.raises(LlmError, match="timed out"):
+        ClaudeCli(model="haiku", timeout=1).complete_json(system="s", prompt="p", schema=SCHEMA)
+
+
 @pytest.mark.parametrize(
     "value",
     [

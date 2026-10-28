@@ -11,9 +11,16 @@ import httpx
 from news_agent.config import Config, ConfigError, Topic, load_config, select_topics
 from news_agent.feeds import collect_items, fetch_feed, make_client
 from news_agent.llm import ClaudeCli
-from news_agent.models import Entry
+from news_agent.models import Entry, Item
 from news_agent.render import render_digest
 from news_agent.summarize import summarize_topic
+
+
+def _positive_int(value: str) -> int:
+    number = int(value)
+    if number <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return number
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -25,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-t", "--topics", help="Comma-separated topic keys (default: all topics in the config)")
     parser.add_argument("-l", "--language", help="Output language, e.g. es, en (overrides the config)")
     parser.add_argument("-m", "--model", help="Claude model alias or name, e.g. haiku, sonnet (overrides the config)")
-    parser.add_argument("--hours", type=int, help="Look-back window in hours (overrides the config)")
+    parser.add_argument("--hours", type=_positive_int, help="Look-back window in hours (overrides the config)")
     parser.add_argument("-o", "--output", type=Path, help="Output file (default: <output_dir>/YYYY-MM-DD.md)")
     parser.add_argument("--dry-run", action="store_true", help="Fetch feeds and list candidates; no LLM call, no file")
     parser.add_argument("--check-feeds", action="store_true", help="Test every configured feed URL and exit")
@@ -39,79 +46,68 @@ def _check_feeds(topics: list[Topic], http: httpx.Client) -> int:
         for url in topic.feeds:
             try:
                 items = fetch_feed(url, http)
-                latest = max((i.published for i in items), default=None)
-                print(
-                    f"  OK    {url}  ({len(items)} entries, latest: {latest:%Y-%m-%d})"
-                    if latest
-                    else f"  OK    {url}  (0 usable entries)"
-                )
             except Exception as exc:
                 failures += 1
                 print(f"  FAIL  {url}  ({exc})")
+                continue
+            latest = max((i.published for i in items), default=None)
+            detail = f"{len(items)} entries, latest: {latest:%Y-%m-%d}" if latest else "0 usable entries"
+            print(f"  OK    {url}  ({detail})")
     return 1 if failures else 0
 
 
-def _run(config: Config, topics: list[Topic], args: argparse.Namespace) -> int:
+def _collect(
+    topic: Topic, config: Config, hours: int, now: datetime, http: httpx.Client
+) -> tuple[list[Item], list[str]]:
+    print(f"- {topic.title}: fetching {len(topic.feeds)} feed(s)...", file=sys.stderr)
+    items, errors = collect_items(
+        topic.feeds,
+        lookback_hours=hours,
+        max_candidates=config.max_candidates_per_topic,
+        max_items_per_feed=config.max_items_per_feed,
+        now=now,
+        client=http,
+    )
+    return items, [f"[{topic.title}] {error}" for error in errors]
+
+
+def _dry_run(config: Config, topics: list[Topic], hours: int, http: httpx.Client) -> int:
+    now = datetime.now(UTC)
+    for topic in topics:
+        items, errors = _collect(topic, config, hours, now, http)
+        print(f"\n## {topic.title} ({len(items)} candidates)")
+        for item in items:
+            print(f"  {item.published:%Y-%m-%d %H:%M}  {item.source}: {item.title}\n    {item.url}")
+        for error in errors:
+            print(f"warning: {error}", file=sys.stderr)
+    return 0
+
+
+def _digest(config: Config, topics: list[Topic], args: argparse.Namespace, http: httpx.Client, llm: ClaudeCli) -> int:
     language = args.language or config.language
     hours = args.hours or config.lookback_hours
     now = datetime.now(UTC)
-
-    llm: ClaudeCli | None = None
-    if not (args.dry_run or args.check_feeds):
-        if shutil.which("claude") is None:
-            print(
-                "Error: the 'claude' CLI was not found. Install Claude Code and run `claude` once "
-                "to log in with your account (or use --dry-run).",
-                file=sys.stderr,
-            )
-            return 2
-        llm = ClaudeCli(model=args.model or config.model)
 
     sections: list[tuple[Topic, list[Entry]]] = []
     warnings: list[str] = []
     failed_topics = 0
 
-    with make_client() as http:
-        if args.check_feeds:
-            return _check_feeds(topics, http)
-
-        for topic in topics:
-            print(f"- {topic.title}: fetching {len(topic.feeds)} feed(s)...", file=sys.stderr)
-            items, errors = collect_items(
-                topic.feeds,
-                lookback_hours=hours,
-                max_candidates=config.max_candidates_per_topic,
-                max_items_per_feed=config.max_items_per_feed,
-                now=now,
-                client=http,
+    for topic in topics:
+        items, errors = _collect(topic, config, hours, now, http)
+        warnings += errors
+        try:
+            entries = summarize_topic(
+                llm,
+                topic_title=topic.title,
+                items=items,
+                language=language,
+                max_items=config.max_items_per_topic,
             )
-            warnings += [f"[{topic.title}] {e}" for e in errors]
-
-            if args.dry_run:
-                print(f"\n## {topic.title} ({len(items)} candidates)")
-                for item in items:
-                    print(f"  {item.published:%Y-%m-%d %H:%M}  {item.source}: {item.title}\n    {item.url}")
-                continue
-
-            assert llm is not None  # set above whenever we are not in dry-run mode
-            try:
-                entries = summarize_topic(
-                    llm,
-                    topic_title=topic.title,
-                    items=items,
-                    language=language,
-                    max_items=config.max_items_per_topic,
-                )
-            except Exception as exc:
-                failed_topics += 1
-                warnings.append(f"[{topic.title}] summarization failed: {exc}")
-                entries = []
-            sections.append((topic, entries))
-
-    if args.dry_run:
-        for w in warnings:
-            print(f"warning: {w}", file=sys.stderr)
-        return 0
+        except Exception as exc:
+            failed_topics += 1
+            warnings.append(f"[{topic.title}] summarization failed: {exc}")
+            entries = []
+        sections.append((topic, entries))
 
     day = datetime.now().astimezone().date()
     path = args.output or config.output_dir / f"{day.isoformat()}.md"
@@ -119,6 +115,24 @@ def _run(config: Config, topics: list[Topic], args: argparse.Namespace) -> int:
     path.write_text(render_digest(day, language, sections, warnings), encoding="utf-8")
     print(f"Digest written to {path}")
     return 1 if failed_topics == len(topics) else 0
+
+
+def _run(config: Config, topics: list[Topic], args: argparse.Namespace) -> int:
+    hours = args.hours or config.lookback_hours
+
+    if args.check_feeds or args.dry_run:
+        with make_client() as http:
+            return _check_feeds(topics, http) if args.check_feeds else _dry_run(config, topics, hours, http)
+
+    if shutil.which("claude") is None:
+        print(
+            "Error: the 'claude' CLI was not found. Install Claude Code and run `claude` once "
+            "to log in with your account (or use --dry-run).",
+            file=sys.stderr,
+        )
+        return 2
+    with make_client() as http:
+        return _digest(config, topics, args, http, ClaudeCli(model=args.model or config.model))
 
 
 def main(argv: list[str] | None = None) -> int:

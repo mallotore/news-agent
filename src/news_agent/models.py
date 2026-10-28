@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Item:
     """A raw item read from a feed. The URL always comes from the feed itself."""
 
@@ -15,7 +15,7 @@ class Item:
     summary: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Entry:
     """A summarized row of the final table. The URL is copied from the source Item."""
 

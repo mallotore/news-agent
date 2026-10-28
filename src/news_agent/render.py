@@ -28,9 +28,10 @@ def render_digest(
             "| Headline | Context | Why it's interesting | Official link |",
             "|---|---|---|---|",
         ]
-        for e in entries:
-            link = f"[{_cell(e.source)}]({e.url.replace(')', '%29')}) · {e.published:%Y-%m-%d}"
-            lines.append(f"| {_cell(e.headline)} | {_cell(e.context)} | {_cell(e.why_interesting)} | {link} |")
+        for entry in entries:
+            link = f"[{_cell(entry.source)}]({entry.url.replace(')', '%29')}) · {entry.published:%Y-%m-%d}"
+            cells = (_cell(entry.headline), _cell(entry.context), _cell(entry.why_interesting), link)
+            lines.append("| " + " | ".join(cells) + " |")
         lines.append("")
 
     if warnings:

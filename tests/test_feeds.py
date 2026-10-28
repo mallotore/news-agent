@@ -1,11 +1,9 @@
 from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 
-httpx = pytest.importorskip("httpx")
-pytest.importorskip("feedparser")
-
-from news_agent.feeds import clean_text, collect_items, fetch_feed, normalize_url  # noqa: E402
+from news_agent.feeds import clean_text, collect_items, fetch_feed, normalize_url
 
 NOW = datetime(2026, 10, 28, 12, 0, tzinfo=UTC)
 
@@ -68,3 +66,48 @@ def test_collect_filters_dedupes_caps_and_survives_failures():
     )
     assert [i.title for i in items] == ["New", "Dup"]
     assert len(errors) == 1 and "broken.test" in errors[0]
+
+
+def collect(feeds, **overrides):
+    options = {"lookback_hours": 48, "max_candidates": 10, "max_items_per_feed": 10}
+    return collect_items(list(feeds), now=NOW, client=client_for(feeds), **{**options, **overrides})
+
+
+def test_per_feed_and_total_caps_keep_the_newest_items():
+    feeds = {
+        "https://a.test/f": rss([(f"A{i}", f"https://a.test/{i}", NOW - timedelta(hours=i + 1)) for i in range(5)]),
+        "https://b.test/f": rss([("B0", "https://b.test/0", NOW - timedelta(minutes=30))]),
+    }
+    items, _ = collect(feeds, max_items_per_feed=2)
+    assert [i.title for i in items] == ["B0", "A0", "A1"]
+
+    items, _ = collect(feeds, max_candidates=2)
+    assert [i.title for i in items] == ["B0", "A0"]
+
+
+def test_future_dated_items_are_dropped():
+    feeds = {"https://a.test/f": rss([("Future", "https://a.test/x", NOW + timedelta(days=3))])}
+    assert collect(feeds)[0] == []
+
+
+def test_fetch_feed_skips_non_http_links_and_untitled_items():
+    feeds = {
+        "https://a.test/f": rss(
+            [
+                ("Bad", "javascript:alert(1)", NOW),
+                ("", "https://a.test/untitled", NOW),
+                ("Ok", "https://a.test/ok", NOW),
+            ]
+        )
+    }
+    assert [i.title for i in fetch_feed("https://a.test/f", client_for(feeds))] == ["Ok"]
+
+
+def test_unparseable_feed_raises():
+    feeds = {"https://a.test/f": "this is not a feed"}
+    with pytest.raises(ValueError, match="unparseable"):
+        fetch_feed("https://a.test/f", client_for(feeds))
+
+
+def test_clean_text_truncates_with_ellipsis():
+    assert clean_text("x" * 20, limit=10) == "x" * 9 + "…"

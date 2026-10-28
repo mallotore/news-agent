@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import re
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -13,7 +14,14 @@ import httpx
 from news_agent.models import Item
 
 USER_AGENT = "news-agent/0.1 (personal local use)"
+MAX_WORKERS = 8
+# Tolerate small clock differences, but drop items dated in the future.
+_FUTURE_TOLERANCE = timedelta(hours=1)
 _TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _by_date(item: Item) -> datetime:
+    return item.published
 
 
 def make_client() -> httpx.Client:
@@ -71,7 +79,7 @@ def fetch_feed(url: str, client: httpx.Client) -> list[Item]:
 
 
 def collect_items(
-    feed_urls: tuple[str, ...] | list[str],
+    feed_urls: Sequence[str],
     *,
     lookback_hours: int,
     max_candidates: int,
@@ -79,31 +87,29 @@ def collect_items(
     now: datetime,
     client: httpx.Client,
 ) -> tuple[list[Item], list[str]]:
-    """Fetch all feeds of a topic and return (recent, de-duplicated candidates, error messages).
+    """Fetch all feeds of a topic and return (recent de-duplicated candidates, error messages).
 
     A failing feed never aborts the run: it is reported and the others continue.
     """
     cutoff = now - timedelta(hours=lookback_hours)
+    latest = now + _FUTURE_TOLERANCE
     errors: list[str] = []
-    per_feed: list[list[Item]] = []
+    candidates: list[Item] = []
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(feed_urls) or 1)) as pool:
         futures = [(url, pool.submit(fetch_feed, url, client)) for url in feed_urls]
         for url, future in futures:
             try:
-                recent = [i for i in future.result() if cutoff <= i.published <= now + timedelta(hours=1)]
+                items = future.result()
             except Exception as exc:
                 errors.append(f"{url}: {exc}")
                 continue
-            recent.sort(key=lambda i: i.published, reverse=True)
+            recent = sorted((i for i in items if cutoff <= i.published <= latest), key=_by_date, reverse=True)
             # Cap per feed so one very chatty source cannot crowd out the others.
-            per_feed.append(recent[:max_items_per_feed])
+            candidates += recent[:max_items_per_feed]
 
-    seen: set[str] = set()
-    merged: list[Item] = []
-    for item in sorted((i for feed in per_feed for i in feed), key=lambda i: i.published, reverse=True):
-        key = normalize_url(item.url)
-        if key not in seen:
-            seen.add(key)
-            merged.append(item)
-    return merged[:max_candidates], errors
+    # Newest first; the first occurrence of each canonical URL wins.
+    unique: dict[str, Item] = {}
+    for item in sorted(candidates, key=_by_date, reverse=True):
+        unique.setdefault(normalize_url(item.url), item)
+    return list(unique.values())[:max_candidates], errors

@@ -11,14 +11,14 @@ class ConfigError(Exception):
     """Raised when the configuration file is missing or invalid."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Topic:
     key: str
     title: str
     feeds: tuple[str, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Config:
     language: str
     model: str
