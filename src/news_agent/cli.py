@@ -87,6 +87,7 @@ def _digest(config: Config, topics: list[Topic], args: argparse.Namespace, http:
     language = args.language or config.language
     hours = args.hours or config.lookback_hours
     now = datetime.now(UTC)
+    day = now.astimezone().date()  # fixed at start so a slow run can't roll into the next day
 
     sections: list[tuple[Topic, list[Entry]]] = []
     warnings: list[str] = []
@@ -95,6 +96,11 @@ def _digest(config: Config, topics: list[Topic], args: argparse.Namespace, http:
     for topic in topics:
         items, errors = _collect(topic, config, hours, now, http)
         warnings += errors
+        if errors and not items:
+            # Every feed failed (e.g. offline): count it as failed without calling the LLM.
+            failed_topics += 1
+            sections.append((topic, []))
+            continue
         try:
             entries = summarize_topic(
                 llm,
@@ -109,10 +115,13 @@ def _digest(config: Config, topics: list[Topic], args: argparse.Namespace, http:
             entries = []
         sections.append((topic, entries))
 
-    day = datetime.now().astimezone().date()
     path = args.output or config.output_dir / f"{day.isoformat()}.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_digest(day, language, sections, warnings), encoding="utf-8")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(render_digest(day, language, sections, warnings), encoding="utf-8")
+    except OSError as exc:
+        print(f"Error: could not write {path}: {exc}", file=sys.stderr)
+        return 2
     print(f"Digest written to {path}")
     return 1 if failed_topics == len(topics) else 0
 
