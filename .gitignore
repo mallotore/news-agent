@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Generated digests and archives
+news/
+*.zip

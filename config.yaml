@@ -1,0 +1,41 @@
+# news-agent configuration
+#
+# Feed URLs below were written from memory and could NOT be verified when this
+# project was generated. Run `python -m news_agent --check-feeds` first and fix
+# or remove any feed reported as FAIL.
+
+language: es            # output language of the digest (es, en, fr, ...)
+model: haiku         # alias passed to `claude --model` (haiku = fast and cheap, sonnet = better prose)
+lookback_hours: 48      # only consider items published in the last N hours
+max_items_per_topic: 5  # rows per topic table
+max_candidates_per_topic: 30  # items sent to the LLM per topic (cost control)
+max_items_per_feed: 10  # cap per feed so one noisy source cannot crowd out the rest
+output_dir: news        # relative to this file; digests are written as YYYY-MM-DD.md
+
+topics:
+  ai:
+    title: Artificial Intelligence
+    feeds:
+      - https://openai.com/news/rss.xml
+      - https://deepmind.google/blog/rss.xml
+      - https://blog.google/technology/ai/rss/
+      - https://huggingface.co/blog/feed.xml
+
+  java:
+    title: Java
+    feeds:
+      - https://inside.java/feed.xml
+      - https://spring.io/blog.atom
+      - https://quarkus.io/feed.xml
+
+  dotnet:
+    title: .NET
+    feeds:
+      - https://devblogs.microsoft.com/dotnet/feed/
+      - https://github.com/dotnet/core/releases.atom
+
+  spain:
+    title: Spain (general)
+    feeds:
+      - https://www.rtve.es/api/noticias.rss
+      # - https://www.boe.es/rss/boe.php   # official gazette: very noisy, enable if you want it
