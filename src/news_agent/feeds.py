@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import re
+import time
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -16,6 +17,7 @@ from news_agent.models import Item
 
 USER_AGENT = "news-agent/0.1 (personal local use)"
 MAX_WORKERS = 8
+RETRY_DELAY = 1.0  # seconds before the single retry of a transient feed failure
 # Tolerate small clock differences, but drop items dated in the future.
 _FUTURE_TOLERANCE = timedelta(hours=1)
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -54,11 +56,32 @@ def _entry_datetime(entry: Any) -> datetime | None:
     return None
 
 
+def _is_transient(exc: Exception) -> bool:
+    """Timeouts, connection problems and 5xx are worth one retry; 4xx and parse errors are not."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code >= 500
+    return isinstance(exc, httpx.TransportError)
+
+
+def _download(url: str, client: httpx.Client) -> bytes:
+    for attempt in (1, 2):
+        try:
+            response = client.get(url)
+            response.raise_for_status()
+            return response.content
+        except httpx.HTTPError as exc:
+            if attempt == 2 or not _is_transient(exc):
+                raise
+            time.sleep(RETRY_DELAY)
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 def fetch_feed(url: str, client: httpx.Client) -> list[Item]:
-    """Download and parse one RSS/Atom feed. Items without a date or http(s) link are skipped."""
-    response = client.get(url)
-    response.raise_for_status()
-    parsed = feedparser.parse(response.content)
+    """Download and parse one RSS/Atom feed. Items without a date or http(s) link are skipped.
+
+    Transient failures (timeout, connection error, 5xx) are retried once.
+    """
+    parsed = feedparser.parse(_download(url, client))
     if parsed.bozo and not parsed.entries:
         raise ValueError(f"unparseable feed ({parsed.bozo_exception})")
 

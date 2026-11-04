@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from news_agent import feeds, llm
 from news_agent.models import Item
 
 
@@ -22,3 +23,9 @@ def make_items():
         ]
 
     return factory
+
+
+@pytest.fixture(autouse=True)
+def no_retry_delay(monkeypatch):
+    monkeypatch.setattr(feeds, "RETRY_DELAY", 0)
+    monkeypatch.setattr(llm, "RETRY_DELAY", 0)

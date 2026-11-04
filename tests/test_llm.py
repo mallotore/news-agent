@@ -88,3 +88,34 @@ def test_missing_cli(monkeypatch):
     monkeypatch.setattr(llm_module.shutil, "which", lambda name: None)
     with pytest.raises(LlmError, match="not found"):
         ClaudeCli(model="haiku").complete_json(system="s", prompt="p", schema=SCHEMA)
+
+
+def test_failed_call_is_retried_once(fake_run, monkeypatch):
+    calls, _ = fake_run
+    good = completed(json.dumps({"is_error": False, "structured_output": {"entries": [1]}}))
+    outcomes = [completed("", returncode=1, stderr="flaky"), good]
+    monkeypatch.setattr(llm_module.subprocess, "run", lambda cmd, **kw: calls.append(cmd) or outcomes.pop(0))
+    assert ClaudeCli(model="haiku").complete_json(system="s", prompt="p", schema=SCHEMA) == {"entries": [1]}
+    assert len(calls) == 2
+
+
+def test_persistent_failure_gives_up_after_one_retry(fake_run):
+    calls, result = fake_run
+    result["value"] = completed("not json")
+    with pytest.raises(LlmError):
+        ClaudeCli(model="haiku").complete_json(system="s", prompt="p", schema=SCHEMA)
+    assert len(calls) == 2
+
+
+def test_timeout_is_not_retried(monkeypatch):
+    attempts = []
+
+    def run(cmd, **kwargs):
+        attempts.append(cmd)
+        raise subprocess.TimeoutExpired(cmd, kwargs["timeout"])
+
+    monkeypatch.setattr(llm_module.subprocess, "run", run)
+    monkeypatch.setattr(llm_module.shutil, "which", lambda name: name)
+    with pytest.raises(LlmError, match="timed out"):
+        ClaudeCli(model="haiku", timeout=1).complete_json(system="s", prompt="p", schema=SCHEMA)
+    assert len(attempts) == 1

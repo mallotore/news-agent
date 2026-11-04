@@ -111,3 +111,45 @@ def test_unparseable_feed_raises():
 
 def test_clean_text_truncates_with_ellipsis():
     assert clean_text("x" * 20, limit=10) == "x" * 9 + "…"
+
+
+def flaky_client(failures, final=None):
+    """Client whose first responses are `failures` (Response or exception), then `final` (default: a valid feed)."""
+    queue = list(failures)
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if queue:
+            outcome = queue.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+        return final or httpx.Response(200, content=rss([("Ok", "https://x.test/1", NOW)]).encode())
+
+    return httpx.Client(transport=httpx.MockTransport(handler)), calls
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [httpx.ReadTimeout("slow"), httpx.ConnectError("down"), httpx.Response(503)],
+)
+def test_transient_failure_is_retried_once(failure):
+    client, calls = flaky_client([failure])
+    assert [i.title for i in fetch_feed("https://a.test/f", client)] == ["Ok"]
+    assert len(calls) == 2
+
+
+def test_persistent_transient_failure_gives_up_after_one_retry():
+    client, calls = flaky_client([httpx.Response(500), httpx.Response(500), httpx.Response(500)])
+    with pytest.raises(httpx.HTTPStatusError):
+        fetch_feed("https://a.test/f", client)
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("status", [403, 404])
+def test_client_errors_are_not_retried(status):
+    client, calls = flaky_client([httpx.Response(status)])
+    with pytest.raises(httpx.HTTPStatusError):
+        fetch_feed("https://a.test/f", client)
+    assert len(calls) == 1

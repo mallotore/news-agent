@@ -12,15 +12,21 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from typing import Any
 
 # If these are set, Claude Code would bill the API instead of the subscription.
 _STRIPPED_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+RETRY_DELAY = 2.0  # seconds before the single retry of a failed call
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$")
 
 
 class LlmError(Exception):
     """Raised when the Claude CLI is missing, fails, or returns unusable output."""
+
+
+class LlmTimeout(LlmError):
+    """The CLI exceeded its time limit; not retried, since a retry could take just as long."""
 
 
 class ClaudeCli:
@@ -30,10 +36,22 @@ class ClaudeCli:
         self.timeout = timeout
 
     def complete_json(self, *, system: str, prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
-        """Run one stateless, tool-less request and return the JSON object the model produced."""
+        """Run one stateless, tool-less request and return the JSON object the model produced.
+
+        A failed exit or unusable output is retried once; a missing CLI or a timeout is not.
+        """
         path = shutil.which(self.executable)
         if path is None:
             raise LlmError(f"'{self.executable}' not found. Install Claude Code and run `claude` once to log in.")
+        try:
+            return self._run(path, system, prompt, schema)
+        except LlmTimeout:
+            raise
+        except LlmError:
+            time.sleep(RETRY_DELAY)
+            return self._run(path, system, prompt, schema)
+
+    def _run(self, path: str, system: str, prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
 
         cmd = [
             path,
@@ -65,7 +83,7 @@ class ClaudeCli:
                 env=env,
             )
         except subprocess.TimeoutExpired:
-            raise LlmError(f"claude timed out after {self.timeout}s") from None
+            raise LlmTimeout(f"claude timed out after {self.timeout}s") from None
 
         if proc.returncode != 0:
             detail = (proc.stderr or proc.stdout or "").strip()[:500]
