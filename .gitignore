@@ -11,6 +11,6 @@ __pycache__/
 .vscode/
 .DS_Store
 
-# Generated digests and archives
+# Generated digests, seen-URLs state and archives
 news/
 *.zip

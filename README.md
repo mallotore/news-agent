@@ -36,9 +36,13 @@ uv run news-agent                 # all topics, config defaults
 -m sonnet           # model alias or name (overrides the config; default: haiku)
 --hours 24          # look-back window
 -o today.md         # custom output file
+--no-dedup          # don't skip URLs from previous digests (and don't update the state)
 --dry-run           # list candidates, no LLM call, no file
 --check-feeds       # test every feed URL and exit
 ```
+
+Already-published URLs are remembered in `<output_dir>/.seen.json` (git-ignored, pruned after the look-back
+window) so the same story doesn't reappear in consecutive digests. Delete the file or use `--no-dedup` to reset.
 
 Add a topic or a source by editing `config.yaml` (a topic is just a title plus a list of feed URLs).
 

@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from datetime import UTC, datetime
 
 import pytest
@@ -16,6 +17,12 @@ topics:
     title: Java
     feeds: [https://example.com/j.xml]
 """
+
+
+@pytest.fixture(autouse=True)
+def no_real_http_client(monkeypatch):
+    """Network calls are stubbed per test; don't build a real client (loads the system CA bundle)."""
+    monkeypatch.setattr(cli, "make_client", lambda: nullcontext(None))
 
 
 @pytest.fixture
@@ -148,3 +155,27 @@ def test_unwritable_output_exits_with_2(config_path, stub_network, monkeypatch, 
     blocker.write_text("x")
     assert cli.main(["-c", str(config_path), "-o", str(blocker / "digest.md")]) == 2
     assert "could not write" in capsys.readouterr().err
+
+
+def test_seen_urls_are_skipped_on_next_run_unless_no_dedup(config_path, stub_network, monkeypatch, tmp_path):
+    fake_llm(monkeypatch)
+    target = tmp_path / "digest.md"
+    args = ["-c", str(config_path), "-o", str(target)]
+    assert cli.main(args) == 0
+    assert (tmp_path / "out" / ".seen.json").exists()
+    assert "[Blog](" in target.read_text(encoding="utf-8")
+
+    assert cli.main(args) == 0  # same candidates: all already seen
+    assert "[Blog](" not in target.read_text(encoding="utf-8")
+
+    assert cli.main([*args, "--no-dedup"]) == 0
+    assert "[Blog](" in target.read_text(encoding="utf-8")
+
+
+def test_partially_failed_topic_with_only_seen_items_is_not_a_failure(config_path, monkeypatch, item, tmp_path):
+    monkeypatch.setattr(cli, "collect_items", lambda *a, **kw: ([item], ["feed down"]))
+    monkeypatch.setattr(cli.shutil, "which", lambda name: f"/usr/bin/{name}")
+    fake_llm(monkeypatch)
+    args = ["-c", str(config_path), "-o", str(tmp_path / "digest.md")]
+    assert cli.main(args) == 0  # first run records the URL
+    assert cli.main(args) == 0  # second run: item seen, one feed failed -> still not a total failure

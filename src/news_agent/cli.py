@@ -13,6 +13,7 @@ from news_agent.feeds import collect_items, fetch_feed, make_client
 from news_agent.llm import ClaudeCli
 from news_agent.models import Entry, Item
 from news_agent.render import render_digest
+from news_agent.seen import STATE_FILENAME, filter_unseen, load_seen, record_and_save
 from news_agent.summarize import summarize_topic
 
 
@@ -37,6 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-m", "--model", help="Claude model alias or name, e.g. haiku, sonnet (overrides the config)")
     parser.add_argument("--hours", type=_positive_int, help="Look-back window in hours (overrides the config)")
     parser.add_argument("-o", "--output", type=Path, help="Output file (default: <output_dir>/YYYY-MM-DD.md)")
+    parser.add_argument("--no-dedup", action="store_true", help="Ignore and don't update the seen-URLs state file")
     parser.add_argument("--dry-run", action="store_true", help="Fetch feeds and list candidates; no LLM call, no file")
     parser.add_argument("--check-feeds", action="store_true", help="Test every configured feed URL and exit")
     return parser
@@ -96,6 +98,7 @@ def _digest(
     output: Path | None,
     http: httpx.Client,
     llm: ClaudeCli,
+    dedup: bool = True,
 ) -> int:
     now = datetime.now(UTC)
     day = now.astimezone().date()  # fixed at start so a slow run can't roll into the next day
@@ -103,11 +106,15 @@ def _digest(
     sections: list[tuple[Topic, list[Entry]]] = []
     warnings: list[str] = []
     failed_topics = 0
+    state_path = config.output_dir / STATE_FILENAME
+    seen = load_seen(state_path) if dedup else {}
 
     for topic in topics:
         items, errors = _collect(topic, config, hours, now, http)
         warnings += errors
-        if errors and not items:
+        all_failed = bool(errors) and not items  # judged before dedup: "all seen" is not a failure
+        items = filter_unseen(items, seen)
+        if all_failed:
             # Every feed failed (e.g. offline): count it as failed without calling the LLM.
             failed_topics += 1
             sections.append((topic, []))
@@ -134,6 +141,12 @@ def _digest(
         print(f"Error: could not write {path}: {exc}", file=sys.stderr)
         return 2
     print(f"Digest written to {path}")
+    if dedup:
+        try:
+            urls = [entry.url for _, entries in sections for entry in entries]
+            record_and_save(state_path, seen, urls, day, hours)
+        except OSError as exc:
+            print(f"warning: could not update {state_path}: {exc}", file=sys.stderr)
     return 1 if failed_topics == len(topics) else 0
 
 
@@ -153,7 +166,16 @@ def _run(config: Config, topics: list[Topic], args: argparse.Namespace) -> int:
         )
         return 2
     with make_client() as http:
-        return _digest(config, topics, hours, language, args.output, http, ClaudeCli(model=args.model or config.model))
+        return _digest(
+            config,
+            topics,
+            hours,
+            language,
+            args.output,
+            http,
+            ClaudeCli(model=args.model or config.model),
+            not args.no_dedup,
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
