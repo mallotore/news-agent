@@ -1,14 +1,12 @@
 # news-agent configuration
 #
-# Feed URLs below were written from memory and could NOT be verified when this
-# project was generated. Run `python -m news_agent --check-feeds` first and fix
-# or remove any feed reported as FAIL.
+# Feed URLs verified on 2026-11-01. Re-run `uv run news-agent --check-feeds` to re-check.
 
 language: es            # output language of the digest (es, en, fr, ...)
 model: haiku         # alias passed to `claude --model` (haiku = fast and cheap, sonnet = better prose)
 lookback_hours: 48      # only consider items published in the last N hours
-max_items_per_topic: 5  # rows per topic table
-max_candidates_per_topic: 30  # items sent to the LLM per topic (cost control)
+max_items_per_topic: 10  # rows per topic table
+max_candidates_per_topic: 60  # items sent to the LLM per topic (cost control)
 max_items_per_feed: 10  # cap per feed so one noisy source cannot crowd out the rest
 output_dir: news        # relative to this file; digests are written as YYYY-MM-DD.md
 
@@ -20,6 +18,19 @@ topics:
       - https://deepmind.google/blog/rss.xml
       - https://blog.google/technology/ai/rss/
       - https://huggingface.co/blog/feed.xml
+      - https://blogs.nvidia.com/feed/
+      - https://aws.amazon.com/blogs/machine-learning/feed/
+      - https://mistral.ai/rss.xml
+      - https://www.microsoft.com/en-us/research/feed/
+      - https://research.google/blog/rss/
+      - https://machinelearning.apple.com/rss.xml
+      - https://the-decoder.com/feed/
+      - https://arstechnica.com/ai/feed/
+      - https://www.technologyreview.com/topic/artificial-intelligence/feed
+      - https://news.mit.edu/rss/topic/artificial-intelligence2
+      - https://spectrum.ieee.org/feeds/topic/artificial-intelligence.rss
+      - https://www.wired.com/feed/tag/ai/latest/rss
+      - https://www.interconnects.ai/feed
 
   java:
     title: Java
@@ -27,15 +38,65 @@ topics:
       - https://inside.java/feed.xml
       - https://spring.io/blog.atom
       - https://quarkus.io/feed.xml
+      - https://blog.jetbrains.com/idea/feed/
+      - https://www.azul.com/feed/
+      - https://www.baeldung.com/feed
+      - https://foojay.io/feed/
+      - https://www.jvm-weekly.com/feed
+      - https://blog.frankel.ch/feed.xml
+      - https://feeds.feedburner.com/InfoQ-Java
 
   dotnet:
     title: .NET
     feeds:
       - https://devblogs.microsoft.com/dotnet/feed/
       - https://github.com/dotnet/core/releases.atom
+      - https://devblogs.microsoft.com/visualstudio/feed/
+      - https://devblogs.microsoft.com/aspnet/feed/
+      - https://devblogs.microsoft.com/nuget/feed/
+      - https://blog.jetbrains.com/dotnet/feed/
+      - https://visualstudiomagazine.com/rss-feeds/news.aspx
+      - https://codeopinion.com/feed/
+      - https://khalidabuhakmeh.com/feed.xml
+      - https://www.infoq.com/feed/dotnet
 
   spain:
     title: Spain (general)
     feeds:
-      - https://www.rtve.es/api/noticias.rss
+      - https://www.lamoncloa.gob.es/Paginas/rss.aspx   # Spanish government press releases
+      - https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada
+      - https://e00-elmundo.uecdn.es/elmundo/rss/portada.xml
+      - https://www.abc.es/rss/2.0/portada/
+      - https://www.lavanguardia.com/rss/home.xml
+      - https://www.eldiario.es/rss/
+      - https://www.20minutos.es/rss/
+      - https://www.elespanol.com/rss/
+      - https://www.expansion.com/rss/portada.xml
+      - https://www.newtral.es/feed/
+      - https://maldita.es/feed/
+      - https://www.huffingtonpost.es/feeds/index.xml
+      - https://www.infolibre.es/rss/
+      - https://www.lavanguardia.com/rss/internacional.xml
+      - https://www.diariodesevilla.es/rss/
       # - https://www.boe.es/rss/boe.php   # official gazette: very noisy, enable if you want it
+
+  software:
+    title: Software Development
+    feeds:
+      - https://martinfowler.com/feed.atom
+      - https://www.thoughtworks.com/rss/insights.xml
+      - https://newsletter.pragmaticengineer.com/feed
+      - https://lethain.com/feeds/
+      - https://tidyfirst.substack.com/feed          # Kent Beck
+      - https://blog.codinghorror.com/rss/           # Jeff Atwood
+      - https://blog.ploeh.dk/rss.xml                # Mark Seemann
+      - https://www.architecture-weekly.com/feed
+      - https://www.oreilly.com/radar/feed/
+      - https://stackoverflow.blog/feed/
+      - https://www.infoq.com/feed/
+      - https://changelog.com/feed
+      - https://github.blog/feed/
+      - https://netflixtechblog.com/feed
+      - https://engineering.fb.com/feed/
+      - https://blog.cloudflare.com/rss/
+      - https://aws.amazon.com/blogs/architecture/feed/
