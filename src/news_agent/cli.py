@@ -61,13 +61,18 @@ def _check_feeds(topics: list[Topic], http: httpx.Client) -> int:
     return 1 if failures else 0
 
 
+def _lookback(topic: Topic, config: Config, override: int | None) -> int:
+    """Look-back window in hours: --hours beats the topic's own value, which beats the global one."""
+    return override or topic.lookback_hours or config.lookback_hours
+
+
 def _collect(
-    topic: Topic, config: Config, hours: int, now: datetime, http: httpx.Client
+    topic: Topic, config: Config, override: int | None, now: datetime, http: httpx.Client
 ) -> tuple[list[Item], list[str]]:
     print(f"- {topic.title}: fetching {len(topic.feeds)} feed(s)...", file=sys.stderr)
     items, errors = collect_items(
         topic.feeds,
-        lookback_hours=hours,
+        lookback_hours=_lookback(topic, config, override),
         max_candidates=config.max_candidates_per_topic,
         max_items_per_feed=config.max_items_per_feed,
         now=now,
@@ -76,11 +81,11 @@ def _collect(
     return items, [f"[{topic.title}] {error}" for error in errors]
 
 
-def _dry_run(config: Config, topics: list[Topic], hours: int, http: httpx.Client) -> int:
+def _dry_run(config: Config, topics: list[Topic], override: int | None, http: httpx.Client) -> int:
     now = datetime.now(UTC)
     warnings: list[str] = []
     for topic in topics:
-        items, errors = _collect(topic, config, hours, now, http)
+        items, errors = _collect(topic, config, override, now, http)
         warnings += errors
         print(f"\n## {topic.title} ({len(items)} candidates)")
         for item in items:
@@ -93,7 +98,7 @@ def _dry_run(config: Config, topics: list[Topic], hours: int, http: httpx.Client
 def _digest(
     config: Config,
     topics: list[Topic],
-    hours: int,
+    override: int | None,
     language: str,
     output: Path | None,
     http: httpx.Client,
@@ -110,7 +115,7 @@ def _digest(
     seen = load_seen(state_path) if dedup else {}
 
     for topic in topics:
-        items, errors = _collect(topic, config, hours, now, http)
+        items, errors = _collect(topic, config, override, now, http)
         warnings += errors
         all_failed = bool(errors) and not items  # judged before dedup: "all seen" is not a failure
         items = filter_unseen(items, seen)
@@ -144,6 +149,8 @@ def _digest(
     if dedup:
         try:
             urls = [entry.url for _, entries in sections for entry in entries]
+            # Keep entries for the longest window in use, so no topic's seen URLs are pruned too early.
+            hours = max(_lookback(topic, config, override) for topic in topics)
             record_and_save(state_path, seen, urls, day, hours)
         except OSError as exc:
             print(f"warning: could not update {state_path}: {exc}", file=sys.stderr)
@@ -151,12 +158,11 @@ def _digest(
 
 
 def _run(config: Config, topics: list[Topic], args: argparse.Namespace) -> int:
-    hours = args.hours if args.hours is not None else config.lookback_hours
     language = args.language or config.language
 
     if args.check_feeds or args.dry_run:
         with make_client() as http:
-            return _check_feeds(topics, http) if args.check_feeds else _dry_run(config, topics, hours, http)
+            return _check_feeds(topics, http) if args.check_feeds else _dry_run(config, topics, args.hours, http)
 
     if shutil.which("claude") is None:
         print(
@@ -169,7 +175,7 @@ def _run(config: Config, topics: list[Topic], args: argparse.Namespace) -> int:
         return _digest(
             config,
             topics,
-            hours,
+            args.hours,
             language,
             args.output,
             http,

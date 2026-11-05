@@ -179,3 +179,42 @@ def test_partially_failed_topic_with_only_seen_items_is_not_a_failure(config_pat
     args = ["-c", str(config_path), "-o", str(tmp_path / "digest.md")]
     assert cli.main(args) == 0  # first run records the URL
     assert cli.main(args) == 0  # second run: item seen, one feed failed -> still not a total failure
+
+
+def test_topic_lookback_beats_global_and_hours_flag_beats_both(tmp_path, monkeypatch, item):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        CONFIG.replace("language: en", "language: en\nlookback_hours: 48").replace(
+            "feeds: [https://example.com/j.xml]", "feeds: [https://example.com/j.xml]\n    lookback_hours: 240"
+        ),
+        encoding="utf-8",
+    )
+    used = []
+    monkeypatch.setattr(cli, "collect_items", lambda feeds, **kw: used.append(kw["lookback_hours"]) or ([item], []))
+    monkeypatch.setattr(cli.shutil, "which", lambda name: f"/usr/bin/{name}")
+    fake_llm(monkeypatch)
+    out = ["-o", str(tmp_path / "d.md")]
+
+    assert cli.main(["-c", str(config), *out]) == 0
+    assert used == [48, 240]  # ai: global, java: its own
+
+    used.clear()
+    assert cli.main(["-c", str(config), "--hours", "5", *out]) == 0
+    assert used == [5, 5]
+
+
+def test_seen_state_keeps_urls_for_the_longest_topic_window(tmp_path, monkeypatch, item):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        CONFIG.replace(
+            "feeds: [https://example.com/j.xml]", "feeds: [https://example.com/j.xml]\n    lookback_hours: 240"
+        ),
+        encoding="utf-8",
+    )
+    saved = []
+    monkeypatch.setattr(cli, "record_and_save", lambda path, seen, urls, today, hours: saved.append(hours))
+    monkeypatch.setattr(cli, "collect_items", lambda *a, **kw: ([item], []))
+    monkeypatch.setattr(cli.shutil, "which", lambda name: f"/usr/bin/{name}")
+    fake_llm(monkeypatch)
+    assert cli.main(["-c", str(config), "-o", str(tmp_path / "d.md")]) == 0
+    assert saved == [240]

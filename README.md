@@ -34,7 +34,7 @@ uv run news-agent                 # all topics, config defaults
 -t ai,java          # only some topics
 -l en               # output language (overrides the config)
 -m sonnet           # model alias or name (overrides the config; default: haiku)
---hours 24          # look-back window
+--hours 24          # look-back window (overrides the config, including per-topic values)
 -o today.md         # custom output file
 --no-dedup          # don't skip URLs from previous digests (and don't update the state)
 --dry-run           # list candidates, no LLM call, no file
@@ -45,6 +45,7 @@ Already-published URLs are remembered in `<output_dir>/.seen.json` (git-ignored,
 window) so the same story doesn't reappear in consecutive digests. Delete the file or use `--no-dedup` to reset.
 
 Add a topic or a source by editing `config.yaml` (a topic is just a title plus a list of feed URLs).
+A quiet topic can have its own window with `lookback_hours: 240` inside the topic; otherwise the global value applies.
 
 ## Choosing a model
 

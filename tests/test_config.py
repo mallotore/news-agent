@@ -39,6 +39,7 @@ def test_missing_file(tmp_path):
         "topics:\n  ai:\n    feeds: []",
         "topics:\n  ai: {title: x}",
         "lookback_hours: 0\ntopics:\n  ai:\n    feeds: [https://x.test/f]",
+        "topics:\n  ai:\n    feeds: [https://x.test/f]\n    lookback_hours: -3",
         "- just a list",
     ],
 )
@@ -53,3 +54,20 @@ def test_select_topics(tmp_path):
     assert [t.key for t in select_topics(config, ["java"])] == ["java"]
     with pytest.raises(ConfigError, match="Unknown topic"):
         select_topics(config, ["nope"])
+
+
+def test_topic_lookback_is_optional(tmp_path):
+    text = VALID.replace(
+        "feeds: [https://example.com/j.xml]", "feeds: [https://example.com/j.xml]\n    lookback_hours: 240"
+    )
+    config = load_config(write(tmp_path, text))
+    assert config.topics["ai"].lookback_hours is None
+    assert config.topics["java"].lookback_hours == 240
+
+
+def test_invalid_topic_lookback_names_the_topic(tmp_path):
+    text = VALID.replace(
+        "feeds: [https://example.com/j.xml]", "feeds: [https://example.com/j.xml]\n    lookback_hours: 0"
+    )
+    with pytest.raises(ConfigError, match="Topic 'java'"):
+        load_config(write(tmp_path, text))

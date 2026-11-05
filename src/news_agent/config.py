@@ -16,6 +16,7 @@ class Topic:
     key: str
     title: str
     feeds: tuple[str, ...]
+    lookback_hours: int | None = None  # None: use the global value
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,10 +58,17 @@ def load_config(path: Path) -> Config:
         feeds = value.get("feeds") if isinstance(value, dict) else None
         if not isinstance(feeds, list) or not feeds or not all(isinstance(f, str) for f in feeds):
             raise ConfigError(f"Topic '{key}' needs a non-empty 'feeds' list of URLs")
+        topic_hours = None
+        if "lookback_hours" in value:
+            try:
+                topic_hours = _positive_int(value, "lookback_hours", 0)
+            except ConfigError as exc:
+                raise ConfigError(f"Topic '{key}': {exc}") from None
         topics[str(key)] = Topic(
             key=str(key),
             title=str(value.get("title", key)),
             feeds=tuple(feeds),
+            lookback_hours=topic_hours,
         )
 
     return Config(
