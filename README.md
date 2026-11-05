@@ -47,6 +47,10 @@ window) so the same story doesn't reappear in consecutive digests. Delete the fi
 Add a topic or a source by editing `config.yaml` (a topic is just a title plus a list of feed URLs).
 A quiet topic can have its own window with `lookback_hours: 240` inside the topic; otherwise the global value applies.
 
+To keep one outlet from dominating a topic, `max_items_per_feed` caps candidates per feed and
+`max_items_per_source` (default 3) caps entries per source in the final digest. The prompt also asks the model
+to prefer the original source over secondary coverage of the same story.
+
 ## Choosing a model
 
 The task is selecting and rephrasing short excerpts that are already in the prompt, so a small model is enough.

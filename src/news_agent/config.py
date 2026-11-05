@@ -27,6 +27,7 @@ class Config:
     max_items_per_topic: int
     max_candidates_per_topic: int
     max_items_per_feed: int
+    max_items_per_source: int
     output_dir: Path
     topics: dict[str, Topic]
 
@@ -78,6 +79,7 @@ def load_config(path: Path) -> Config:
         max_items_per_topic=_positive_int(raw, "max_items_per_topic", 5),
         max_candidates_per_topic=_positive_int(raw, "max_candidates_per_topic", 30),
         max_items_per_feed=_positive_int(raw, "max_items_per_feed", 10),
+        max_items_per_source=_positive_int(raw, "max_items_per_source", 3),
         # Relative paths are resolved against the config file, not the current directory.
         output_dir=(path.parent / str(raw.get("output_dir", "news"))).resolve(),
         topics=topics,

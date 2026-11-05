@@ -131,6 +131,7 @@ def _digest(
                 items=items,
                 language=language,
                 max_items=config.max_items_per_topic,
+                max_per_source=config.max_items_per_source,
             )
         except Exception as exc:
             failed_topics += 1
