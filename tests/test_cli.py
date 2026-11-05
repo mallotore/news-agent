@@ -218,3 +218,25 @@ def test_seen_state_keeps_urls_for_the_longest_topic_window(tmp_path, monkeypatc
     fake_llm(monkeypatch)
     assert cli.main(["-c", str(config), "-o", str(tmp_path / "d.md")]) == 0
     assert saved == [240]
+
+
+def test_run_prints_a_per_topic_summary(config_path, stub_network, monkeypatch, tmp_path, capsys):
+    fake_llm(monkeypatch, fail_topics=("Java",))
+    args = ["-c", str(config_path), "-o", str(tmp_path / "d.md")]
+    assert cli.main(args) == 0
+    err = capsys.readouterr().err
+    assert "AI: feeds 1/1 ok, 1 candidates, 1 selected" in err
+    assert "Java: feeds 1/1 ok, 1 candidates, 0 selected  FAILED" in err
+    assert "Total: 1 items in" in err
+
+    fake_llm(monkeypatch)
+    cli.main(args)  # second run: AI's URL is now recorded as seen
+    assert "(+1 already seen)" in capsys.readouterr().err
+
+
+def test_summary_counts_failed_feeds(config_path, monkeypatch, item, tmp_path, capsys):
+    monkeypatch.setattr(cli, "collect_items", lambda *a, **kw: ([item], ["https://x.test/f: boom"]))
+    monkeypatch.setattr(cli.shutil, "which", lambda name: f"/usr/bin/{name}")
+    fake_llm(monkeypatch)
+    assert cli.main(["-c", str(config_path), "-o", str(tmp_path / "d.md")]) == 0
+    assert "feeds 0/1 ok" in capsys.readouterr().err

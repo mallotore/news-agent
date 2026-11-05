@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
+import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -81,6 +83,31 @@ def _collect(
     return items, [f"[{topic.title}] {error}" for error in errors]
 
 
+@dataclass(slots=True)
+class _TopicStats:
+    title: str
+    feeds: int
+    feeds_failed: int = 0
+    candidates: int = 0
+    already_seen: int = 0
+    selected: int = 0
+    failed: bool = False
+
+
+def _print_summary(stats: list[_TopicStats], started: float) -> None:
+    print("\nSummary:", file=sys.stderr)
+    for s in stats:
+        seen = f" (+{s.already_seen} already seen)" if s.already_seen else ""
+        status = "  FAILED" if s.failed else ""
+        print(
+            f"  {s.title}: feeds {s.feeds - s.feeds_failed}/{s.feeds} ok, "
+            f"{s.candidates} candidates{seen}, {s.selected} selected{status}",
+            file=sys.stderr,
+        )
+    total = sum(s.selected for s in stats)
+    print(f"  Total: {total} items in {time.monotonic() - started:.1f}s", file=sys.stderr)
+
+
 def _dry_run(config: Config, topics: list[Topic], override: int | None, http: httpx.Client) -> int:
     now = datetime.now(UTC)
     warnings: list[str] = []
@@ -105,11 +132,13 @@ def _digest(
     llm: ClaudeCli,
     dedup: bool = True,
 ) -> int:
+    started = time.monotonic()
     now = datetime.now(UTC)
     day = now.astimezone().date()  # fixed at start so a slow run can't roll into the next day
 
     sections: list[tuple[Topic, list[Entry]]] = []
     warnings: list[str] = []
+    stats: list[_TopicStats] = []
     failed_topics = 0
     state_path = config.output_dir / STATE_FILENAME
     seen = load_seen(state_path) if dedup else {}
@@ -118,10 +147,14 @@ def _digest(
         items, errors = _collect(topic, config, override, now, http)
         warnings += errors
         all_failed = bool(errors) and not items  # judged before dedup: "all seen" is not a failure
+        total = len(items)
         items = filter_unseen(items, seen)
+        stat = _TopicStats(topic.title, len(topic.feeds), len(errors), len(items), total - len(items))
+        stats.append(stat)
         if all_failed:
             # Every feed failed (e.g. offline): count it as failed without calling the LLM.
             failed_topics += 1
+            stat.failed = True
             sections.append((topic, []))
             continue
         try:
@@ -135,8 +168,10 @@ def _digest(
             )
         except Exception as exc:
             failed_topics += 1
+            stat.failed = True
             warnings.append(f"[{topic.title}] summarization failed: {exc}")
             entries = []
+        stat.selected = len(entries)
         sections.append((topic, entries))
 
     path = output or config.output_dir / f"{day.isoformat()}.md"
@@ -155,6 +190,7 @@ def _digest(
             record_and_save(state_path, seen, urls, day, hours)
         except OSError as exc:
             print(f"warning: could not update {state_path}: {exc}", file=sys.stderr)
+    _print_summary(stats, started)
     return 1 if failed_topics == len(topics) else 0
 
 
