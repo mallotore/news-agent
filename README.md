@@ -9,7 +9,7 @@ No API key and no API credits are needed.
 ## How it works
 
 1. Reads the RSS/Atom feeds you configure per topic.
-2. Keeps items from the last N hours, de-duplicated.
+2. Keeps items from the last N hours, de-duplicated, and skips URLs already published in earlier digests.
 3. Asks Claude (one call per topic, no tools, no session) to pick the best ones and write the context / "why it's interesting".
 4. Links are copied from the feed items. The model only returns item ids, so it cannot invent a URL.
 5. Writes `news/YYYY-MM-DD.md`.
@@ -51,6 +51,21 @@ To keep one outlet from dominating a topic, `max_items_per_feed` caps candidates
 `max_items_per_source` (default 3) caps entries per source in the final digest. The prompt also asks the model
 to prefer the original source over secondary coverage of the same story.
 
+## Configuration
+
+Settings in `config.yaml` (CLI flags override them):
+
+| Key | Default | Meaning |
+|---|---|---|
+| `language` | `en` | Output language of the digest |
+| `model` | `haiku` | Alias passed to `claude --model` |
+| `lookback_hours` | `48` | Only consider items published in the last N hours (a topic may set its own) |
+| `max_items_per_topic` | `5` | Rows per topic table |
+| `max_candidates_per_topic` | `30` | Items sent to the model per topic (cost control) |
+| `max_items_per_feed` | `10` | Candidates kept per feed |
+| `max_items_per_source` | `3` | Entries per source in each topic's final digest |
+| `output_dir` | `news` | Where digests and `.seen.json` go (relative to the config file) |
+
 ## Choosing a model
 
 The task is selecting and rephrasing short excerpts that are already in the prompt, so a small model is enough.
@@ -66,6 +81,7 @@ which is more fragile than running `uv run` locally.
 
 ```bash
 uv run pytest             # tests
+uv run pytest --cov=news_agent --cov-report=term-missing   # with coverage
 uv run ruff check .       # lint
 uv run ruff format .      # format
 uv run mypy               # type check
@@ -74,7 +90,7 @@ uv run mypy               # type check
 ## Layout
 
 ```
-src/news_agent/   application code (cli, config, feeds, llm, summarize, render, models)
+src/news_agent/   application code (cli, config, feeds, llm, seen, summarize, render, models)
 tests/            pytest suite
 config.yaml       topics and feed URLs
 ```
