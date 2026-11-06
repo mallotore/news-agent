@@ -35,14 +35,16 @@ A row from a generated digest (`language: es` in the config):
 ## Setup
 
 ```bash
-git clone <repo-url> news-agent && cd news-agent
+git clone git@github.com:mallotore/news-agent.git && cd news-agent
+cp config.example.yaml config.yaml   # your personal config (git-ignored)
 claude                            # once: log in with your account
 uv run news-agent --check-feeds   # validate feed URLs first
 uv run news-agent                 # all topics, config defaults
 ```
 
 The first `uv run` creates the environment and installs the locked dependencies.
-Edit `config.yaml` to choose your own topics and feeds.
+Edit `config.yaml` to choose your own topics and feeds. It is git-ignored, so `git pull` never overwrites it;
+`config.example.yaml` is the tracked template.
 
 > `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` are removed from the environment of the `claude`
 > subprocess on purpose: if they were set, Claude Code would bill the API instead of your subscription.
@@ -131,7 +133,7 @@ uv run mypy               # type check
 ```
 src/news_agent/   application code (cli, config, feeds, llm, seen, summarize, render, models)
 tests/            pytest suite
-config.yaml       topics and feed URLs
+config.example.yaml   template config (copy to config.yaml, which is git-ignored)
 ```
 
 ## License
