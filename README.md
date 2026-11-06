@@ -14,16 +14,35 @@ No API key and no API credits are needed.
 4. Links are copied from the feed items. The model only returns item ids, so it cannot invent a URL.
 5. Writes `news/YYYY-MM-DD.md`.
 
+## Example output
+
+A row from a generated digest (`language: es` in the config):
+
+```markdown
+## Java
+
+| Headline | Context | Why it's interesting | Official link |
+|---|---|---|---|
+| Project Detroit propone usar FFM para embeber runtimes de otros lenguajes en Java | Project Detroit busca facilitar la interacción con runtimes completos como JavaScript o Python. En lugar de implementar runtimes propios, usa la API Foreign Function & Memory (FFM) para integrar runtimes nativos estándar como V8 y CPython. | Ofrece una vía para ejecutar código JavaScript o Python desde aplicaciones Java sin reimplementar esos lenguajes, usando runtimes de referencia. | [Inside Java](https://inside.java/2026/11/04/devoxxbelgium-project-detroit/) · 2026-11-04 |
+```
+
+## Requirements
+
+- Python 3.12+ (installed automatically by `uv`)
+- [uv](https://docs.astral.sh/uv/)
+- [Claude Code](https://code.claude.com) installed and logged in with a Claude subscription
+
 ## Setup
 
-1. Install [Claude Code](https://code.claude.com) and run `claude` once to log in with your account.
-2. Install [uv](https://docs.astral.sh/uv/) (it downloads the right Python for you).
-
 ```bash
-uv lock --upgrade                           # once: resolve and pin the latest stable versions
+git clone <repo-url> news-agent && cd news-agent
+claude                            # once: log in with your account
 uv run news-agent --check-feeds   # validate feed URLs first
 uv run news-agent                 # all topics, config defaults
 ```
+
+The first `uv run` creates the environment and installs the locked dependencies.
+Edit `config.yaml` to choose your own topics and feeds.
 
 > `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` are removed from the environment of the `claude`
 > subprocess on purpose: if they were set, Claude Code would bill the API instead of your subscription.
@@ -72,6 +91,13 @@ The task is selecting and rephrasing short excerpts that are already in the prom
 Start with `haiku`; switch to `sonnet` if the "why it's interesting" column feels shallow.
 Usage counts against your subscription limits.
 
+## Limitations
+
+- It depends on the `claude -p` CLI and its JSON output. The parser accepts the formats seen so far,
+  but a future Claude Code release could change them.
+- Only RSS/Atom feeds are supported, and only the title and excerpt in the feed reach the model (it does not open the articles).
+- Runs on demand; schedule it yourself (cron, launchd) if you want a daily digest.
+
 ## Docker?
 
 Not provided: the container would need the `claude` CLI and your login credentials inside it,
@@ -94,3 +120,7 @@ src/news_agent/   application code (cli, config, feeds, llm, seen, summarize, re
 tests/            pytest suite
 config.yaml       topics and feed URLs
 ```
+
+## License
+
+[MIT](LICENSE)
