@@ -15,3 +15,6 @@ __pycache__/
 # Generated digests, seen-URLs state and archives
 news/
 *.zip
+
+# Personal config (copy of config.example.yaml)
+/config.yaml

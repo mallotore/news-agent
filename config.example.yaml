@@ -1,4 +1,4 @@
-# news-agent configuration
+# news-agent example configuration. Copy to config.yaml and adapt.
 #
 # Feed URLs verified on 2026-11-01. Re-run `uv run news-agent --check-feeds` to re-check.
 
