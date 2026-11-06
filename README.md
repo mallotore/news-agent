@@ -1,5 +1,7 @@
 # news-agent
 
+[![CI](https://github.com/mallotore/news-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/mallotore/news-agent/actions/workflows/ci.yml)
+
 Daily news digest from **official feeds**, summarized by Claude into a Markdown table
 (headline, context, why it's interesting, official link). Runs locally, on demand.
 
