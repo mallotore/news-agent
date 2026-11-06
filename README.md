@@ -91,6 +91,19 @@ The task is selecting and rephrasing short excerpts that are already in the prom
 Start with `haiku`; switch to `sonnet` if the "why it's interesting" column feels shallow.
 Usage counts against your subscription limits.
 
+## Permissions and safety
+
+Feed content is untrusted text that ends up in the prompt, so the `claude` subprocess is given no capabilities:
+
+- `--tools ""`: no file, shell or web access. The model can only return text.
+- `--strict-mcp-config`: no MCP servers are loaded.
+- `--disable-slash-commands` and `--no-session-persistence`: no skills or commands, and nothing is saved to a session.
+- The prompt goes through stdin and no shell is involved, so feed content cannot inject commands.
+- Output must match a JSON schema, and links are copied from the feed items, never taken from the model.
+
+A malicious feed item can at worst influence the wording or selection of a row; it cannot make the model act on your machine.
+The program itself only makes HTTP GET requests to your configured feeds and writes inside `output_dir`.
+
 ## Limitations
 
 - It depends on the `claude -p` CLI and its JSON output. The parser accepts the formats seen so far,
