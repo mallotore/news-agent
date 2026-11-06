@@ -76,3 +76,8 @@ def test_invalid_topic_lookback_names_the_topic(tmp_path):
 def test_invalid_yaml(tmp_path):
     with pytest.raises(ConfigError, match="Invalid YAML"):
         load_config(write(tmp_path, "topics: [unclosed"))
+
+
+def test_missing_default_config_suggests_the_example(tmp_path):
+    with pytest.raises(ConfigError, match=r"config\.example\.yaml"):
+        load_config(tmp_path / "config.yaml")

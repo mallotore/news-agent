@@ -43,7 +43,8 @@ def load_config(path: Path) -> Config:
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        raise ConfigError(f"Config file not found: {path}") from None
+        hint = " (copy config.example.yaml to config.yaml first)" if path.name == "config.yaml" else ""
+        raise ConfigError(f"Config file not found: {path}{hint}") from None
     except yaml.YAMLError as exc:
         raise ConfigError(f"Invalid YAML in {path}: {exc}") from exc
 
