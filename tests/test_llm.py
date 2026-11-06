@@ -119,3 +119,10 @@ def test_timeout_is_not_retried(monkeypatch):
     with pytest.raises(LlmError, match="timed out"):
         ClaudeCli(model="haiku", timeout=1).complete_json(system="s", prompt="p", schema=SCHEMA)
     assert len(attempts) == 1
+
+
+def test_event_list_without_result_event_is_an_error(fake_run):
+    _, result = fake_run
+    result["value"] = completed(json.dumps([{"type": "system"}]))
+    with pytest.raises(LlmError, match="Unexpected claude output format"):
+        ClaudeCli("haiku").complete_json(system="s", prompt="p", schema=SCHEMA)

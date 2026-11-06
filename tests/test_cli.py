@@ -240,3 +240,19 @@ def test_summary_counts_failed_feeds(config_path, monkeypatch, item, tmp_path, c
     fake_llm(monkeypatch)
     assert cli.main(["-c", str(config_path), "-o", str(tmp_path / "d.md")]) == 0
     assert "feeds 0/1 ok" in capsys.readouterr().err
+
+
+def test_dry_run_prints_feed_warnings(config_path, monkeypatch, item, capsys):
+    monkeypatch.setattr(cli, "collect_items", lambda *a, **kw: ([item], ["feed X failed"]))
+    assert cli.main(["-c", str(config_path), "--dry-run"]) == 0
+    assert "warning: [AI] feed X failed" in capsys.readouterr().err
+
+
+def test_unwritable_seen_state_only_warns(config_path, stub_network, monkeypatch, tmp_path, capsys):
+    def boom(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(cli, "record_and_save", boom)
+    fake_llm(monkeypatch)
+    assert cli.main(["-c", str(config_path), "-o", str(tmp_path / "d.md")]) == 0
+    assert "could not update" in capsys.readouterr().err

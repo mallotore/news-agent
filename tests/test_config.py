@@ -71,3 +71,8 @@ def test_invalid_topic_lookback_names_the_topic(tmp_path):
     )
     with pytest.raises(ConfigError, match="Topic 'java'"):
         load_config(write(tmp_path, text))
+
+
+def test_invalid_yaml(tmp_path):
+    with pytest.raises(ConfigError, match="Invalid YAML"):
+        load_config(write(tmp_path, "topics: [unclosed"))

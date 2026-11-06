@@ -153,3 +153,21 @@ def test_client_errors_are_not_retried(status):
     with pytest.raises(httpx.HTTPStatusError):
         fetch_feed("https://a.test/f", client)
     assert len(calls) == 1
+
+
+def test_make_client_sets_user_agent_and_follows_redirects(monkeypatch):
+    from news_agent import feeds
+
+    captured = {}
+    monkeypatch.setattr(feeds.httpx, "Client", lambda **kwargs: captured.update(kwargs))  # avoid loading CA bundle
+    feeds.make_client()
+    assert captured["follow_redirects"] is True
+    assert "User-Agent" in captured["headers"]
+
+
+def test_entry_without_any_date_is_skipped():
+    xml = (
+        '<?xml version="1.0"?><rss version="2.0"><channel><title>F</title>'
+        "<item><title>Undated</title><link>https://a.test/u</link></item></channel></rss>"
+    )
+    assert fetch_feed("https://a.test/f", client_for({"https://a.test/f": xml})) == []
